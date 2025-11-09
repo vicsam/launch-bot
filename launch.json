@@ -1,0 +1,42 @@
+{
+    "launches": [
+      {
+        "name": "TestToken",
+        "symbol": "TTK",
+        "total_supply": "1000000",
+        "chains": ["ethereum"],
+        "description": "This is a test token for demonstration purposes."
+      },
+
+        {
+            "name": "SampleCoin",
+            "symbol": "SCN",
+            "total_supply": "5000000",
+            "chains": ["bnb"],
+            "description": "This is a test token for demonstration purposes."
+        },
+        {
+            "name": "MyToken",
+            "symbol": "MTK",
+            "total_supply": "2000000",
+            "chains": ["avalanche"],
+            "description": "This is a test token for demonstration purposes."
+        },
+        {
+            "name": "DemoToken",
+            "symbol": "DMT",
+            "total_supply": "750000",
+            "chains": ["solana"],
+            "description": "This is a test token for demonstration purposes."
+        },
+        {
+            "name": "CryptoGem",
+            "symbol": "CGM",
+            "total_supply": "3000000",
+            "chains": ["ethereum", "solana"],
+            "description": "This is a test token for demonstration purposes."
+        }
+    ]
+  }
+
+  

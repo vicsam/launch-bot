@@ -1,0 +1,6 @@
+*.db
+*.sqlite3
+.env
+bot.log
+*__pycache__/
+printr_client.log

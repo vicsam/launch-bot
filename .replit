@@ -28,3 +28,7 @@ args = "python launch_bot.py"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[ports]]
+localPort = 8443
+externalPort = 80

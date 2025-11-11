@@ -15,8 +15,6 @@ from printr_client import get_token_quote, create_token, sign_and_submit_transac
 
 # Load environment variables
 load_dotenv()
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
-ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", 0))  # Expected user ID from .env
 
 # Logging setup
 logging.basicConfig(
@@ -28,6 +26,16 @@ logger = logging.getLogger(__name__)
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 logger.addHandler(console_handler)
+
+# Validate and load environment variables
+BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not BOT_TOKEN:
+    logger.error("TELEGRAM_TOKEN environment variable is not set. Please configure it in .env file.")
+    raise ValueError("TELEGRAM_TOKEN is required. Please set it in your .env file.")
+
+ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", 0))  # Expected user ID from .env
+if ALLOWED_USER_ID == 0:
+    logger.warning("ALLOWED_USER_ID not set. Bot will not allow any users until configured.")
 
 # Initialize Telegram bot
 bot = telebot.TeleBot(BOT_TOKEN)

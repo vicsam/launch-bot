@@ -20,6 +20,7 @@ args = "telegram-bot"
 [[workflows.workflow]]
 name = "telegram-bot"
 author = "agent"
+mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

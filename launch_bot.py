@@ -11,7 +11,7 @@ from telebot import types
 from apscheduler.schedulers.background import BackgroundScheduler
 from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
 from dotenv import load_dotenv
-from printr_client import get_token_quote, create_token, sign_and_submit_transaction, get_token_status
+from printr_client import get_token_quote, create_token, sign_and_submit_transaction, get_token_status, CHAIN_MAPPINGS  # ← FIXED: Added CHAIN_MAPPINGS
 from flask import Flask
 from cryptography.fernet import Fernet
 import threading
@@ -53,6 +53,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not BOT_TOKEN:
 	logger.error("TELEGRAM_TOKEN environment variable is not set.")
 	raise ValueError("TELEGRAM_TOKEN is required.")
+
 ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", 0))
 if ALLOWED_USER_ID == 0:
 	logger.warning("ALLOWED_USER_ID not set.")
@@ -80,6 +81,7 @@ if not encryption_key:
 	logger.info(
 	    "Generated new encryption key. Store it securely as ENCRYPTION_KEY.")
 	print(f"Generated Encryption Key: {encryption_key}")
+
 cipher_suite = Fernet(encryption_key)
 
 
@@ -121,6 +123,7 @@ def init_db():
 		if col not in existing_columns:
 			logger.info(f"Adding missing column {col} to launches table")
 			cursor.execute(f"ALTER TABLE launches ADD COLUMN {col} TEXT")
+
 	cursor.execute("""
         CREATE TABLE IF NOT EXISTS wallets (
             user_id INTEGER,
@@ -131,12 +134,13 @@ def init_db():
             PRIMARY KEY (user_id, chain)
         )
     """)
+
 	# Populate wallets table for Base chain from .env
 	base_wallet_env = os.getenv("BASE_WALLET_ADDRESS")
 	base_private_key_env = os.getenv("BASE_PRIVATE_KEY")
 	if base_wallet_env and base_private_key_env:
 		encrypted_private_key = encrypt_private_key(base_private_key_env)
-		caip10_address = f"eip155:8453:{base_wallet_env}"  # Proper CAIP-10 format
+		caip10_address = f"eip155:8453:{base_wallet_env}"
 		cursor.execute(
 		    """
             INSERT OR REPLACE INTO wallets (user_id, chain, wallet_address, caip10_address, private_key_encrypted)
@@ -146,6 +150,7 @@ def init_db():
 		logger.info("Initialized wallet for base from .env")
 	else:
 		logger.warning("Missing wallet or private key for base in .env")
+
 	conn.commit()
 	conn.close()
 	logger.info("Database initialized successfully")
@@ -374,7 +379,7 @@ def button_callback(call):
 		try:
 			with open("bot.log", "r") as f:
 				lines = f.readlines()[-10:]
-				response = "```Recent Logs:\n" + "".join(lines) + "```"
+			response = "```Recent Logs:\n" + "".join(lines) + "```"
 			bot.send_message(call.message.chat.id, response, parse_mode="Markdown")
 			logger.info(f"Sent logs to user_id: {user_id}")
 		except Exception as e:
@@ -1026,11 +1031,11 @@ def run_scheduled_launch():
 		name = launch_data.get("name", "Unnamed Token")
 		symbol = launch_data.get("symbol")
 		description = launch_data.get("description", f"{name} launched via Printr")
-		image_b64 = launch_data.get("image")  # Extract image from JSON
+		image_b64 = launch_data.get("image")
 		chains = [
 		    SUPPORTED_CHAINS.get(chain, chain)
 		    for chain in launch_data.get("chains", [])
-		]  # Convert to CAIP-2
+		]
 		external_links = launch_data.get("external_links", None)
 
 		# Retry logic for get_token_quote
@@ -1048,26 +1053,26 @@ def run_scheduled_launch():
 				logger.error(
 				    f"Quote failed for launch_id {launch_id} (attempt {attempt + 1}/{max_retries}): {str(e)}"
 				)
-			if attempt < max_retries - 1:
-				import time
-				time.sleep(5)  # Wait before retry
-			else:
-				error_message = str(e) if quote_response is None else quote_response.get(
-				    'error', {}).get('message', 'Unknown error')
-				cursor.execute(
-				    "UPDATE launches SET printr_status = ?, quote = ? WHERE id = ?",
-				    ("FAILED", json.dumps({"error": {
-				        "message": error_message
-				    }}), launch_id))
-				conn.commit()
-				try:
-					bot.send_message(
-					    ALLOWED_USER_ID,
-					    f"```Quote failed for {name} (ID: {launch_id}): {error_message}```",
-					    parse_mode="Markdown")
-				except Exception as e:
-					logger.error(f"Error sending quote failure message: {str(e)}")
-				continue
+				if attempt < max_retries - 1:
+					import time
+					time.sleep(5)
+				else:
+					error_message = str(e) if quote_response is None else quote_response.get(
+					    'error', {}).get('message', 'Unknown error')
+					cursor.execute(
+					    "UPDATE launches SET printr_status = ?, quote = ? WHERE id = ?",
+					    ("FAILED", json.dumps({"error": {
+					        "message": error_message
+					    }}), launch_id))
+					conn.commit()
+					try:
+						bot.send_message(
+						    ALLOWED_USER_ID,
+						    f"```Quote failed for {name} (ID: {launch_id}): {error_message}```",
+						    parse_mode="Markdown")
+					except Exception as e:
+						logger.error(f"Error sending quote failure message: {str(e)}")
+					continue
 		if status != 200:
 			continue
 
@@ -1092,7 +1097,7 @@ def run_scheduled_launch():
 			continue
 		creator_account = result[0]
 
-		# Retry logic for create_token with correct parameters
+		# Retry logic for create_token
 		max_retries = 3
 		response = None
 		for attempt in range(max_retries):
@@ -1103,7 +1108,7 @@ def run_scheduled_launch():
 				                                description=description,
 				                                image_b64=image_b64,
 				                                chains=chains,
-				                                initial_buy_percent=5,
+				                                initial_buy_percent=0,
 				                                graduation_threshold=69000,
 				                                external_links=external_links,
 				                                creator_account=creator_account)
@@ -1114,26 +1119,26 @@ def run_scheduled_launch():
 				logger.error(
 				    f"Token creation failed for launch_id {launch_id} (attempt {attempt + 1}/{max_retries}): {str(e)}"
 				)
-			if attempt < max_retries - 1:
-				import time
-				time.sleep(5)  # Wait before retry
-			else:
-				error_message = str(e) if response is None else response.get(
-				    'error', {}).get('message', 'Unknown error')
-				cursor.execute(
-				    "UPDATE launches SET printr_status = ?, quote = ? WHERE id = ?",
-				    ("FAILED", json.dumps({"error": {
-				        "message": error_message
-				    }}), launch_id))
-				conn.commit()
-				try:
-					bot.send_message(
-					    ALLOWED_USER_ID,
-					    f"```Token creation failed for {name} (ID: {launch_id}): {error_message}```",
-					    parse_mode="Markdown")
-				except Exception as e:
-					logger.error(f"Error sending failure message: {str(e)}")
-				continue
+				if attempt < max_retries - 1:
+					import time
+					time.sleep(5)
+				else:
+					error_message = str(e) if response is None else response.get(
+					    'error', {}).get('message', 'Unknown error')
+					cursor.execute(
+					    "UPDATE launches SET printr_status = ?, quote = ? WHERE id = ?",
+					    ("FAILED", json.dumps({"error": {
+					        "message": error_message
+					    }}), launch_id))
+					conn.commit()
+					try:
+						bot.send_message(
+						    ALLOWED_USER_ID,
+						    f"```Token creation failed for {name} (ID: {launch_id}): {error_message}```",
+						    parse_mode="Markdown")
+					except Exception as e:
+						logger.error(f"Error sending failure message: {str(e)}")
+					continue
 		if status != 201:
 			continue
 
@@ -1172,17 +1177,12 @@ def run_scheduled_launch():
 		private_key = decrypt_private_key(private_key_encrypted)
 
 		# Prepare payload for transaction submission
-		payload_dict = payload.copy(
-		)  # Create a copy to avoid modifying the original
-		# Extract raw hex address from CAIP-10 format
-		to_address = payload_dict["to"].split(":")[
-		    -1]  # Extracts '0x576CbcdE3fe704B2166E8fAC54D7a664b0325C10'
-		payload_dict["to"] = to_address  # Update with raw hex address
-		# Convert base64 calldata to hex with validation
+		payload_dict = payload.copy()
+		to_address = payload_dict["to"].split(":")[-1]
+		payload_dict["to"] = to_address
 		try:
 			calldata_bytes = base64.b64decode(payload_dict["calldata"])
-			payload_dict["calldata"] = "0x" + calldata_bytes.hex(
-			)  # Ensure hex string starts with '0x'
+			payload_dict["calldata"] = "0x" + calldata_bytes.hex()
 			logger.debug(
 			    f"Converted calldata for launch_id {launch_id}: {payload_dict['calldata']}"
 			)
@@ -1200,13 +1200,18 @@ def run_scheduled_launch():
 				logger.error(f"Error sending calldata failure message: {str(e)}")
 			continue
 
-		# Transaction submission with increased timeout and detailed logging
+		# FIXED: Pass CAIP-2 chain ID instead of short name
 		try:
 			logger.debug(
 			    f"Attempting to sign and submit transaction for {name} on {home_chain} with payload: {json.dumps(payload_dict)}"
 			)
-			success, tx_result = sign_and_submit_transaction(
-			    home_chain, payload_dict, private_key, timeout=60)  # Removed chain_id
+			home_chain_caip = CHAIN_MAPPINGS.get(home_chain.lower(),
+			                                     home_chain)  # ← THIS IS THE FIX
+			success, tx_result = sign_and_submit_transaction(home_chain_caip,
+			                                                 payload_dict,
+			                                                 private_key,
+			                                                 timeout=60)
+
 			logger.debug(
 			    f"Transaction result for {name} (ID: {launch_id}): success={success}, tx_result={tx_result}"
 			)
